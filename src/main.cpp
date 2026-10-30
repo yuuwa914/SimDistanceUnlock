@@ -24,7 +24,6 @@
 #include <cstring>
 #include <span>
 
-#include "pl/Gloss.h"
 #include "pl/Mod.hpp"
 #include "pl/memory/Patch.hpp"
 #include "pl/memory/Signature.hpp"
@@ -160,8 +159,6 @@ public:
     /* All-or-nothing: every site is inspected first; if any one does not
      * match this game build, nothing at all is written. */
     bool load() {
-        GlossInit(true);
-
         constexpr size_t kCount = sizeof(kSites) / sizeof(kSites[0]);
         Resolved found[kCount];
         bool ok = true;
