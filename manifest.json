@@ -1,0 +1,9 @@
+{
+  "type": "preload-native",
+  "name": "SimDistanceUnlock",
+  "author": "yuuwa914",
+  "description": "Unlocks the simulation distance range (default 1-32, step 1). Minecraft Bedrock 1.26.60.4 only; leaves the game untouched on other builds.",
+  "version": "1.0.0",
+  "entry": "libSimDistanceUnlock.so",
+  "minecraft_versions": []
+}
