@@ -8,7 +8,7 @@ Minecraft Bedrock の演算距離(simulation distance)を、自由に設定で�
    設定画面もワールドに入る処理もこの値を参照するため、ここが「ワールドに入ると 8 に戻る」原因
    → 常に `kMaxDistance` を返すように置き換え
 1. 設定画面の選択肢の一覧 … 元は「4, 6, 8, … 上限まで(2刻み)」
-   → 開始値・刻みを置き換え(既定: 1〜32を1刻み)
+   → 開始値・刻みを置き換え(既定: 1〜64を1刻み)
 2. ワールド(level.dat)読み込み時の `serverChunkTickRange` の補正 … 元は 4〜12 に収める
    → 補正の下限・上限を置き換え
 
@@ -16,7 +16,7 @@ Minecraft Bedrock の演算距離(simulation distance)を、自由に設定で�
 `src/main.cpp` 冒頭の3つの定数を編集します。
 ```cpp
 constexpr uint32_t kMinDistance = 1;  // 最小値
-constexpr uint32_t kMaxDistance = 32; // 最大値(4以上)
+constexpr uint32_t kMaxDistance = 64; // 最大値(4以上)
 constexpr uint32_t kStep = 1;         // 一覧の刻み
 ```
 
@@ -25,7 +25,6 @@ constexpr uint32_t kStep = 1;         // 一覧の刻み
 - 全ての箇所が一致したときだけ書き込みます(1つでも不一致なら何も書きません)。
 
 ## 注意
-- 4未満は、バニラが想定していない値です。まず新しい捨てワールドで試してください。
 - 大きい値ほどメモリとCPUを使います。メモリ不足で落ちる端末では、上げすぎないでください。
 - 他にも制限(サーバー側・Realms など)がある可能性があります。画面に選択肢が出ても、実際に反映されるかは実機で確認が必要です。
 
