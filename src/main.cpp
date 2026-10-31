@@ -138,6 +138,15 @@ const char *const kSigRenderMax =
     "0A 49 83 52 3F 09 00 71 48 01 88 9A 3F 0D 00 71 "
     "89 48 83 52 28 01 88 9A 00 68 68 B8 C0 03 5F D6 ";
 
+/* Group 5: OptionRegistry vtable slot 13 (0xB0BCAB8): max(levels.back(),
+ * slot60()). The settings slider appears to use this one, so it is patched
+ * together with group 4. Body is replaced by "mov w0,#N ; ret". */
+const char *const kSigRenderMax2 =
+    "?? ?? ?? ?? ?? ?? ?? ?? FD 03 00 91 08 00 40 F9 "
+    "13 30 4D F9 08 F1 40 F9 00 01 3F D6 68 C2 5F B8 "
+    "1F 01 00 6B 00 C1 80 1A F3 0B 40 F9 FD 7B C2 A8 "
+    "C0 03 5F D6";
+
 const PatchSite kSites[] = {
     /* Function entry becomes:  mov w0, #kMaxDistance ; ret
      * (replaces "stp x29,x30,[sp,#-48]!" and "str x21,[sp,#0x10]") */
@@ -150,6 +159,11 @@ const PatchSite kSites[] = {
     {"simdist.render_max_mov", kSigRenderMax, 0x0C, le(0xF94D3008u),
      le(movzW(0, kMaxRenderDistance))},
     {"simdist.render_max_ret", kSigRenderMax, 0x10, le(0xB85FC100u),
+     le(0xD65F03C0u)},
+
+    {"simdist.render_max2_mov", kSigRenderMax2, 0x00, le(0xA9BE7BFDu),
+     le(movzW(0, kMaxRenderDistance))},
+    {"simdist.render_max2_ret", kSigRenderMax2, 0x04, le(0xF9000BF3u),
      le(0xD65F03C0u)},
 
     /* mov w26, #4  ->  mov w26, #kMinDistance   (first option) */
