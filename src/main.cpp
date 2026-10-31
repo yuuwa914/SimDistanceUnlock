@@ -32,8 +32,8 @@
 #include "pl/memory/Signature.hpp"
 
 /* ------------------------------ settings -------------------------------- */
-constexpr uint32_t kMinDistance = 1;  /* smallest selectable value            */
-constexpr uint32_t kMaxDistance = 32; /* largest selectable value (>= 4)      */
+constexpr uint32_t kMinDistance = 4;  /* smallest selectable value            */
+constexpr uint32_t kMaxDistance = 64; /* largest selectable value (>= 4)      */
 constexpr uint32_t kStep = 1;         /* spacing between options in the list  */
 /* ------------------------------------------------------------------------ */
 
