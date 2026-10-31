@@ -7,6 +7,9 @@
  *  0. platform    AppPlatform_android::getMaxSimulationDistance() returns a
  *                 device-tier cap (4..12, often 8). Settings screen and world
  *                 entry both use it.  -> it now returns kMaxDistance.
+ *  R. render max  OptionRegistry::getMaxRenderDistance() returns the last entry
+ *                 of the render-distance level list (the slider's maximum).
+ *                 -> it now returns kMaxRenderDistance.
  *  1. ui_list     The settings screen builds its option list as
  *                 4, 6, 8, ... up to that maximum.
  *                 -> start value and step are replaced.
@@ -32,9 +35,12 @@
 #include "pl/memory/Signature.hpp"
 
 /* ------------------------------ settings -------------------------------- */
-constexpr uint32_t kMinDistance = 4;  /* smallest selectable value            */
-constexpr uint32_t kMaxDistance = 64; /* largest selectable value (>= 4)      */
+constexpr uint32_t kMinDistance = 1;  /* smallest selectable value            */
+constexpr uint32_t kMaxDistance = 32; /* largest selectable value (>= 4)      */
 constexpr uint32_t kStep = 1;         /* spacing between options in the list  */
+/* Render distance (描画距離) upper limit shown/accepted by the settings.
+ * WARNING: huge values need huge amounts of memory (96 = ~129x the chunks of 8). */
+constexpr uint32_t kMaxRenderDistance = 96;
 /* ------------------------------------------------------------------------ */
 
 namespace {
@@ -66,6 +72,8 @@ static_assert(kMaxDistance >= 4 && kMaxDistance <= 255,
               "kMaxDistance must be in 4..255 (the game needs >= 4 to build the list)");
 static_assert(kMaxDistance >= kMinDistance, "kMaxDistance < kMinDistance");
 static_assert(kStep >= 1 && kStep <= 16, "kStep must be 1..16");
+static_assert(kMaxRenderDistance >= 4 && kMaxRenderDistance <= 1000,
+              "kMaxRenderDistance must be in 4..1000");
 
 constexpr std::array<uint8_t, 4> le(uint32_t w) {
     return {static_cast<uint8_t>(w), static_cast<uint8_t>(w >> 8),
@@ -121,12 +129,27 @@ const char *const kSigPlatformMax =
     "00 01 80 52 F4 4F 42 A9 F5 0B 40 F9 FD 7B C3 A8 "
     "C0 03 5F D6";
 
+/* Group 4: OptionRegistry::getMaxRenderDistance() (0xB0BCAEC).
+ * Original body: "ldr x8,[x0,#0x1a60]; ldur w0,[x8,#-4]; ret" = the last entry
+ * of the render-distance level list (22 on the reporter's device). */
+const char *const kSigRenderMax =
+    "F3 0B 40 F9 FD 7B C2 A8 C0 03 5F D6 ?? ?? ?? ?? "
+    "?? ?? ?? ?? C0 03 5F D6 29 1C 00 12 08 48 83 52 "
+    "0A 49 83 52 3F 09 00 71 48 01 88 9A 3F 0D 00 71 "
+    "89 48 83 52 28 01 88 9A 00 68 68 B8 C0 03 5F D6 ";
+
 const PatchSite kSites[] = {
     /* Function entry becomes:  mov w0, #kMaxDistance ; ret
      * (replaces "stp x29,x30,[sp,#-48]!" and "str x21,[sp,#0x10]") */
     {"simdist.platform_max_mov", kSigPlatformMax, 0x00, le(0xA9BD7BFDu),
      le(movzW(0, kMaxDistance))},
     {"simdist.platform_max_ret", kSigPlatformMax, 0x04, le(0xF9000BF5u),
+     le(0xD65F03C0u)},
+
+    /* getMaxRenderDistance() becomes:  mov w0, #kMaxRenderDistance ; ret */
+    {"simdist.render_max_mov", kSigRenderMax, 0x0C, le(0xF94D3008u),
+     le(movzW(0, kMaxRenderDistance))},
+    {"simdist.render_max_ret", kSigRenderMax, 0x10, le(0xB85FC100u),
      le(0xD65F03C0u)},
 
     /* mov w26, #4  ->  mov w26, #kMinDistance   (first option) */
