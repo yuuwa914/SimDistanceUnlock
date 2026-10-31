@@ -4,9 +4,12 @@
  * Minecraft Bedrock 1.26.60.4 (arm64) limits simulation distance in two
  * places; this mod rewrites a few constants in both at load time:
  *
+ *  0. platform    AppPlatform_android::getMaxSimulationDistance() returns a
+ *                 device-tier cap (4..12, often 8). Settings screen and world
+ *                 entry both use it.  -> it now returns kMaxDistance.
  *  1. ui_list     The settings screen builds its option list as
- *                 4, 6, 8, ... up to a maximum the game reports.
- *                 -> start value, step and maximum are replaced.
+ *                 4, 6, 8, ... up to that maximum.
+ *                 -> start value and step are replaced.
  *  2. level_clamp When a world's level.dat is read, "serverChunkTickRange"
  *                 is clamped to [4, 12].
  *                 -> the clamp bounds are replaced.
@@ -56,6 +59,7 @@ static_assert(cmpImmW(0, 4) == 0x7100101Fu);
 static_assert(movzW(8, 4) == 0x52800088u);
 static_assert(movzW(9, 12) == 0x52800189u);
 static_assert(cmpImmW(8, 12) == 0x7100311Fu);
+static_assert(movzW(0, 12) == 0x52800180u);
 
 static_assert(kMinDistance >= 1, "kMinDistance must be >= 1");
 static_assert(kMaxDistance >= 4 && kMaxDistance <= 255,
@@ -102,10 +106,29 @@ const char *const kSigLevelClamp =
     "08 C0 88 1A ?? ?? ?? ?? 08 31 89 1A ?? ?? ?? ?? "
     "88 00 80 52 68 32 03 B9";
 
+/* Group 3: AppPlatform_android::getMaxSimulationDistance() (0x11C3901C).
+ * Returns a device-tier cap (4..12; 8 on many phones). The settings screen
+ * AND the world-entry path both consult it, which is why only raising the
+ * option list is not enough. */
+const char *const kSigPlatformMax =
+    "?? ?? ?? ?? ?? ?? ?? ?? F4 4F 02 A9 FD 03 00 91 "
+    "08 00 40 F9 F4 03 00 AA 08 61 40 F9 00 01 3F D6 "
+    "88 02 40 F9 F3 03 00 AA E0 03 14 AA 08 51 40 F9 "
+    "00 01 3F D6 88 02 40 F9 F5 03 00 2A E0 03 14 AA "
+    "08 69 43 F9 00 01 3F D6 BF 36 00 71 ?? ?? ?? ?? "
+    "40 01 80 52 F4 4F 42 A9 F5 0B 40 F9 FD 7B C3 A8 "
+    "C0 03 5F D6 ?? ?? ?? ?? 68 FE 5F D3 ?? ?? ?? ?? "
+    "00 01 80 52 F4 4F 42 A9 F5 0B 40 F9 FD 7B C3 A8 "
+    "C0 03 5F D6";
+
 const PatchSite kSites[] = {
-    /* mov w21, w0  ->  mov w21, #kMaxDistance   (upper bound of the list) */
-    {"simdist.ui_max", kSigUiList, 0x04, le(0x2A0003F5u),
-     le(movzW(21, kMaxDistance))},
+    /* Function entry becomes:  mov w0, #kMaxDistance ; ret
+     * (replaces "stp x29,x30,[sp,#-48]!" and "str x21,[sp,#0x10]") */
+    {"simdist.platform_max_mov", kSigPlatformMax, 0x00, le(0xA9BD7BFDu),
+     le(movzW(0, kMaxDistance))},
+    {"simdist.platform_max_ret", kSigPlatformMax, 0x04, le(0xF9000BF5u),
+     le(0xD65F03C0u)},
+
     /* mov w26, #4  ->  mov w26, #kMinDistance   (first option) */
     {"simdist.ui_start", kSigUiList, 0xBC, le(movzW(26, 4)),
      le(movzW(26, kMinDistance))},
