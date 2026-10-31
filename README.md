@@ -15,12 +15,13 @@ Minecraft Bedrock の演算距離(simulation distance)を、自由に設定で�
 ## 範囲の変え方
 `src/main.cpp` 冒頭の3つの定数を編集します。
 ```cpp
-constexpr uint32_t kMinDistance = 1;  // 最小値
+constexpr uint32_t kMinDistance = 4;  // 最小値
 constexpr uint32_t kMaxDistance = 64; // 最大値(4以上)
 constexpr uint32_t kStep = 1;         // 一覧の刻み
 ```
 
 ## 安全設計
+- 4以下は使用禁止です。マップに入れなくなります
 - 書き換え位置は署名で探し、元の命令であることを確認してから書きます。
 - 全ての箇所が一致したときだけ書き込みます(1つでも不一致なら何も書きません)。
 
