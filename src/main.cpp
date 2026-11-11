@@ -1,15 +1,12 @@
 /*
  * SimDistanceUnlock - lets the simulation distance (演算距離) be set freely.
  *
- * Minecraft Bedrock 1.26.60.4 (arm64) limits simulation distance in two
- * places; this mod rewrites a few constants in both at load time:
+ * Minecraft Bedrock (arm64; verified on 1.26.60.4 and 1.26.62.01) limits
+ * simulation distance in three places; this mod rewrites a few instructions in them at load time:
  *
  *  0. platform    AppPlatform_android::getMaxSimulationDistance() returns a
  *                 device-tier cap (4..12, often 8). Settings screen and world
  *                 entry both use it.  -> it now returns kMaxDistance.
- *  R. render max  OptionRegistry::getMaxRenderDistance() returns the last entry
- *                 of the render-distance level list (the slider's maximum).
- *                 -> it now returns kMaxRenderDistance.
  *  1. ui_list     The settings screen builds its option list as
  *                 4, 6, 8, ... up to that maximum.
  *                 -> start value and step are replaced.
@@ -17,12 +14,17 @@
  *                 is clamped to [4, 12].
  *                 -> the clamp bounds are replaced.
  *
- * Every site is located by byte signature (the patched instructions are
- * wildcarded, so the signature matches both before and after patching) and
- * its original instruction is verified before writing, so a game build that differs simply leaves the
- * game untouched (load() returns false) - it can never write blindly.
+ * Every site is located by byte signature. Patched instructions, relative
+ * branches and adrp/add address pairs are wildcarded, so one signature matches
+ * both before and after patching and survives rebuilds that only move code.
+ * Each site's original instruction is verified before writing. All sites are checked
+ * first; if any one differs (other game build) nothing is written and load()
+ * returns false - it can never write blindly.
  *
- * Edit the three constants below to change the range.
+ * Render distance (描画距離) is NOT touched: its limit comes from a level
+ * table loaded from game data, which this approach cannot change.
+ *
+ * Edit the constants below to change the range.
  */
 #include <android/log.h>
 #include <array>
@@ -38,9 +40,6 @@
 constexpr uint32_t kMinDistance = 1;  /* smallest selectable value            */
 constexpr uint32_t kMaxDistance = 32; /* largest selectable value (>= 4)      */
 constexpr uint32_t kStep = 1;         /* spacing between options in the list  */
-/* Render distance (描画距離) upper limit shown/accepted by the settings.
- * WARNING: huge values need huge amounts of memory (96 = ~129x the chunks of 8). */
-constexpr uint32_t kMaxRenderDistance = 96;
 /* ------------------------------------------------------------------------ */
 
 namespace {
@@ -72,8 +71,6 @@ static_assert(kMaxDistance >= 4 && kMaxDistance <= 255,
               "kMaxDistance must be in 4..255 (the game needs >= 4 to build the list)");
 static_assert(kMaxDistance >= kMinDistance, "kMaxDistance < kMinDistance");
 static_assert(kStep >= 1 && kStep <= 16, "kStep must be 1..16");
-static_assert(kMaxRenderDistance >= 4 && kMaxRenderDistance <= 1000,
-              "kMaxRenderDistance must be in 4..1000");
 
 constexpr std::array<uint8_t, 4> le(uint32_t w) {
     return {static_cast<uint8_t>(w), static_cast<uint8_t>(w >> 8),
@@ -88,7 +85,8 @@ struct PatchSite {
     std::array<uint8_t, 4> patch;
 };
 
-/* Group 1: settings-screen option list builder (1.26.60.4: 0xA1B3420) */
+/* Group 1: settings-screen option list builder
+ * (1.26.60.4: 0xA1B3420, 1.26.62.01: 0xA1B3850) */
 const char *const kSigUiList =
     "00 01 3F D6 ?? ?? ?? ?? FF 7F 02 A9 ?? ?? ?? ?? "
     "C1 22 00 91 00 00 80 92 ?? ?? ?? ?? ?? ?? ?? ?? "
@@ -106,15 +104,17 @@ const char *const kSigUiList =
     "?? ?? ?? ?? 79 12 00 F9 5F 03 15 6B ?? ?? ?? ?? "
     "68 16 40 F9 3F 03 08 EB";
 
-/* Group 2: level.dat "serverChunkTickRange" clamp [4,12] (0x11132280) */
+/* Group 2: level.dat "serverChunkTickRange" clamp [4,12]
+ * (1.26.60.4: 0x11132280, 1.26.62.01: 0x11132820) */
 const char *const kSigLevelClamp =
     "E0 03 14 AA 82 02 80 52 ?? ?? ?? ?? ?? ?? ?? ?? "
-    "?? ?? ?? ?? 21 34 0F 91 E0 03 14 AA 82 02 80 52 "
+    "?? ?? ?? ?? ?? ?? ?? ?? E0 03 14 AA 82 02 80 52 "
     "?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? ?? "
     "08 C0 88 1A ?? ?? ?? ?? 08 31 89 1A ?? ?? ?? ?? "
     "88 00 80 52 68 32 03 B9";
 
-/* Group 3: AppPlatform_android::getMaxSimulationDistance() (0x11C3901C).
+/* Group 3: AppPlatform_android::getMaxSimulationDistance()
+ * (1.26.60.4: 0x11C3901C, 1.26.62.01: 0x11C3962C).
  * Returns a device-tier cap (4..12; 8 on many phones). The settings screen
  * AND the world-entry path both consult it, which is why only raising the
  * option list is not enough. */
@@ -129,41 +129,12 @@ const char *const kSigPlatformMax =
     "00 01 80 52 F4 4F 42 A9 F5 0B 40 F9 FD 7B C3 A8 "
     "C0 03 5F D6";
 
-/* Group 4: OptionRegistry::getMaxRenderDistance() (0xB0BCAEC).
- * Original body: "ldr x8,[x0,#0x1a60]; ldur w0,[x8,#-4]; ret" = the last entry
- * of the render-distance level list (22 on the reporter's device). */
-const char *const kSigRenderMax =
-    "F3 0B 40 F9 FD 7B C2 A8 C0 03 5F D6 ?? ?? ?? ?? "
-    "?? ?? ?? ?? C0 03 5F D6 29 1C 00 12 08 48 83 52 "
-    "0A 49 83 52 3F 09 00 71 48 01 88 9A 3F 0D 00 71 "
-    "89 48 83 52 28 01 88 9A 00 68 68 B8 C0 03 5F D6 ";
-
-/* Group 5: OptionRegistry vtable slot 13 (0xB0BCAB8): max(levels.back(),
- * slot60()). The settings slider appears to use this one, so it is patched
- * together with group 4. Body is replaced by "mov w0,#N ; ret". */
-const char *const kSigRenderMax2 =
-    "?? ?? ?? ?? ?? ?? ?? ?? FD 03 00 91 08 00 40 F9 "
-    "13 30 4D F9 08 F1 40 F9 00 01 3F D6 68 C2 5F B8 "
-    "1F 01 00 6B 00 C1 80 1A F3 0B 40 F9 FD 7B C2 A8 "
-    "C0 03 5F D6";
-
 const PatchSite kSites[] = {
     /* Function entry becomes:  mov w0, #kMaxDistance ; ret
      * (replaces "stp x29,x30,[sp,#-48]!" and "str x21,[sp,#0x10]") */
     {"simdist.platform_max_mov", kSigPlatformMax, 0x00, le(0xA9BD7BFDu),
      le(movzW(0, kMaxDistance))},
     {"simdist.platform_max_ret", kSigPlatformMax, 0x04, le(0xF9000BF5u),
-     le(0xD65F03C0u)},
-
-    /* getMaxRenderDistance() becomes:  mov w0, #kMaxRenderDistance ; ret */
-    {"simdist.render_max_mov", kSigRenderMax, 0x0C, le(0xF94D3008u),
-     le(movzW(0, kMaxRenderDistance))},
-    {"simdist.render_max_ret", kSigRenderMax, 0x10, le(0xB85FC100u),
-     le(0xD65F03C0u)},
-
-    {"simdist.render_max2_mov", kSigRenderMax2, 0x00, le(0xA9BE7BFDu),
-     le(movzW(0, kMaxRenderDistance))},
-    {"simdist.render_max2_ret", kSigRenderMax2, 0x04, le(0xF9000BF3u),
      le(0xD65F03C0u)},
 
     /* mov w26, #4  ->  mov w26, #kMinDistance   (first option) */
